@@ -976,6 +976,10 @@ const BIOME_PRESET_ALIASES = Object.freeze({
   saturno: 'saturn', saturn: 'saturn', urano: 'uranus', uranus: 'uranus',
   netuno: 'neptune', neptune: 'neptune', tita: 'titan', 'titã': 'titan', titan: 'titan',
   sol: 'venus', sun: 'venus', ceres: 'moon', pluto: 'mercury', plutao: 'mercury', 'plutão': 'mercury',
+  'oceânico': 'ocean', oceanico: 'ocean', deserto: 'desert',
+  'mundo oceânico': 'ocean', 'mundo oceanico': 'ocean',
+  'mundo árido': 'desert', 'mundo arido': 'desert',
+  'gigante gasoso': 'gasGiant', 'gigante': 'gasGiant',
 });
 
 /**
@@ -987,25 +991,28 @@ const BIOME_PRESET_ALIASES = Object.freeze({
  */
 export function normalizeBiomeProfile(profile = {}) {
   const p = profile ?? {};
-  const hasOcean = p.hasOcean !== false && (p.seaLevel ?? DEFAULT_BIOME_PROFILE.seaLevel) > 0.001;
-  const seaLevel = hasOcean ? clamp(p.seaLevel ?? DEFAULT_BIOME_PROFILE.seaLevel, 0.02, 0.96) : 0;
-  const beachWidth = hasOcean
-    ? clamp(p.beachWidth ?? DEFAULT_BIOME_PROFILE.beachWidth, 0.001, 0.25)
-    : 0;
+  const num = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const d = DEFAULT_BIOME_PROFILE;
+  const hasOcean = p.hasOcean !== false && num(p.seaLevel, d.seaLevel) > 0.001;
+  const seaLevel = hasOcean ? clamp(num(p.seaLevel, d.seaLevel), 0.02, 0.96) : 0;
+  const beachWidth = hasOcean ? clamp(num(p.beachWidth, d.beachWidth), 0.001, 0.25) : 0;
   const landStart = hasOcean ? seaLevel + beachWidth : 0;
-  const plainsLine = clamp(p.plainsLine ?? lerp(landStart, 1, 0.42), landStart + 0.005, 0.985);
-  const mountainLine = clamp(p.mountainLine ?? lerp(landStart, 1, 0.78), plainsLine + 0.005, 0.995);
-  const snowLine = clamp(p.snowLine ?? lerp(landStart, 1, 0.94), mountainLine, 0.999);
+  const plainsLine = clamp(num(p.plainsLine, d.plainsLine), landStart + 0.005, 0.985);
+  const mountainLine = clamp(num(p.mountainLine, d.mountainLine), plainsLine + 0.005, 0.995);
+  const snowLine = clamp(num(p.snowLine, d.snowLine), mountainLine, 0.999);
   return {
     seaLevel,
     beachWidth,
     plainsLine,
     mountainLine,
     snowLine,
-    polarStart: clamp(p.polarStart ?? DEFAULT_BIOME_PROFILE.polarStart, 0, 1),
-    polarSoftness: clamp(p.polarSoftness ?? DEFAULT_BIOME_PROFILE.polarSoftness, 0.001, 0.5),
-    oceanSoftness: clamp(p.oceanSoftness ?? DEFAULT_BIOME_PROFILE.oceanSoftness, 0.0005, 0.2),
-    iceStrength: clamp01(p.iceStrength ?? DEFAULT_BIOME_PROFILE.iceStrength),
+    polarStart: clamp(num(p.polarStart, d.polarStart), 0, 1),
+    polarSoftness: clamp(num(p.polarSoftness, d.polarSoftness), 0.001, 0.5),
+    oceanSoftness: clamp(num(p.oceanSoftness, d.oceanSoftness), 0.0005, 0.2),
+    iceStrength: clamp01(num(p.iceStrength, d.iceStrength)),
     hasOcean,
   };
 }
@@ -1020,8 +1027,9 @@ export function normalizeBiomeProfile(profile = {}) {
  * @returns {{deepOcean:number,ocean:number,beach:number,plains:number,hills:number,mountains:number,ice:number}}
  */
 export function biomeWeights(altitude, polar = 0, profile = DEFAULT_BIOME_PROFILE, out = {}) {
-  const p = profile?.seaLevel === undefined ? normalizeBiomeProfile(profile) : profile;
-  const h = clamp01(altitude);
+  const p = normalizeBiomeProfile(profile ?? DEFAULT_BIOME_PROFILE);
+  const h = clamp01(Number.isFinite(altitude) ? altitude : 0);
+  const polarValue = Number.isFinite(polar) ? polar : 0;
   const sea = p.seaLevel ?? DEFAULT_BIOME_PROFILE.seaLevel;
   const soft = p.oceanSoftness ?? DEFAULT_BIOME_PROFILE.oceanSoftness;
 
@@ -1051,7 +1059,7 @@ export function biomeWeights(altitude, polar = 0, profile = DEFAULT_BIOME_PROFIL
   const polarMask = smoothstep(
     (p.polarStart ?? DEFAULT_BIOME_PROFILE.polarStart) - (p.polarSoftness ?? 0.08),
     (p.polarStart ?? DEFAULT_BIOME_PROFILE.polarStart) + (p.polarSoftness ?? 0.08),
-    clamp01(polar),
+    clamp01(polarValue),
   ) * clamp01(p.iceStrength ?? 1);
   const ice = clamp01(1 - (1 - clamp01(snow)) * (1 - polarMask));
 
@@ -1564,12 +1572,12 @@ export function buildCloudUniforms(layers, deck, options = {}) {
   }
   const baseRadius = (planetRadiusMeters + deck.baseAltitude) / mpu;
   const topRadius = (planetRadiusMeters + deck.topAltitude) / mpu;
-  const center = options.center ?? [0, 0, 0];
+  const center = asVec3(options.center, [0, 0, 0]);
   const colors = options.colors ?? {
     lit: colorToLinear(deck.color, [0, 0, 0]),
     shade: colorToLinear(deck.shadeColor, [0, 0, 0]),
   };
-  const wind = deck.windDirection ?? [1, 0, 0.25];
+  const wind = asVec3(deck.windDirection, [1, 0, 0.25]);
   const uniforms = {
     uPlanetCenter: center,
     uPlanetRadius: planetRadiusMeters / mpu,
@@ -1577,8 +1585,8 @@ export function buildCloudUniforms(layers, deck, options = {}) {
     uCloudTopRadius: topRadius,
     uCloudLayerA: A,
     uCloudLayerB: B,
-    uCloudColor: colors.lit,
-    uCloudShadeColor: colors.shade,
+    uCloudColor: readRGB(colors.lit, [1, 1, 1]),
+    uCloudShadeColor: readRGB(colors.shade, [0.7, 0.8, 0.9]),
     uCloudWind: [wind[0] * deck.windSpeed, wind[1] * deck.windSpeed, wind[2] * deck.windSpeed],
     uCloudWarp: deck.warp,
     uDensityScale: deck.density,
@@ -1593,11 +1601,11 @@ export function buildCloudUniforms(layers, deck, options = {}) {
     uLightMarchDistance: deck.lightMarchDistance,
     uAmbientIntensity: deck.ambientIntensity,
     uTime: options.time ?? 0,
-    uSunDirection: options.sunDirection ?? normalize3([1, 0.25, 0.4]),
-    uSunColor: options.sunColor ?? [1, 1, 1],
+    uSunDirection: normalize3(asVec3(options.sunDirection, [1, 0.25, 0.4])),
+    uSunColor: linearColor(options.sunColor, [1, 1, 1]),
     uSunIntensity: options.sunIntensity ?? 3,
-    uSkyColor: options.skyColor ?? [0.35, 0.5, 0.8],
-    uGroundColor: options.groundColor ?? [0.08, 0.07, 0.06],
+    uSkyColor: linearColor(options.skyColor, [0.35, 0.5, 0.8]),
+    uGroundColor: linearColor(options.groundColor, [0.08, 0.07, 0.06]),
     uExposure: options.exposure ?? 1,
     uInsideShell: 0,
   };
@@ -1667,7 +1675,7 @@ export function atmosphereUniforms(state = null, options = {}) {
   );
   const scaleHeight = Math.max(
     100,
-    state?.scaleHeight ?? model.scaleHeight ?? ATMOSPHERE_DEFAULTS.scaleHeight,
+    options.scaleHeight ?? state?.scaleHeight ?? model.scaleHeight ?? ATMOSPHERE_DEFAULTS.scaleHeight,
   );
   const mieState = state?.mie ?? null;
   const mieScaleHeight = Math.max(
@@ -1692,14 +1700,16 @@ export function atmosphereUniforms(state = null, options = {}) {
     : DEFAULT_MIE_COEFF;
   const stateAltitude = Number.isFinite(state?.altitude) ? state.altitude : 0;
   const useStateCoeffs = !!state?.rayleigh && stateAltitude <= 1000;
-  const rayleighCoeff = options.rayleigh
-    ?? (useStateCoeffs ? readRGB(state.rayleigh, referenceRayleigh) : referenceRayleigh);
-  const mieCoeff = options.mie
-    ?? (useStateCoeffs ? readRGB(mieState, referenceMie) : referenceMie);
+  const rayleighCoeff = options.rayleigh !== undefined
+    ? readRGB(options.rayleigh, referenceRayleigh)
+    : (useStateCoeffs ? readRGB(state.rayleigh, referenceRayleigh) : referenceRayleigh);
+  const mieCoeff = options.mie !== undefined
+    ? readRGB(options.mie, referenceMie)
+    : (useStateCoeffs ? readRGB(mieState, referenceMie) : referenceMie);
   const density = state?.density ?? null;
 
   const uniforms = {
-    uPlanetCenter: options.center ?? [0, 0, 0],
+    uPlanetCenter: asVec3(options.center, [0, 0, 0]),
     uPlanetRadius: planetRadius / mpu,
     uAtmosphereRadius: (planetRadius + topAltitude) / mpu,
     uMetersPerUnit: mpu,
@@ -1710,8 +1720,8 @@ export function atmosphereUniforms(state = null, options = {}) {
     uMieG: mieG,
     uScatteringStrength: options.scatteringStrength ?? 1,
     uMieBoost: options.mieBoost ?? 0.6,
-    uSunDirection: options.sunDirection ?? normalize3([1, 0.25, 0.4]),
-    uSunColor: options.sunColor ?? [1, 1, 1],
+    uSunDirection: normalize3(asVec3(options.sunDirection, [1, 0.25, 0.4])),
+    uSunColor: linearColor(options.sunColor, [1, 1, 1]),
     uSunIntensity: options.sunIntensity ?? 4,
     uExposure: options.exposure ?? 1,
     uInsideShell: 0,
@@ -3992,7 +4002,7 @@ export class UniformBinder {
   /** @private Lê todos os uniforms ativos do programa. */
   _introspect() {
     const gl = this.gl;
-    if (!gl || typeof gl.getProgramParameter !== 'function') return;
+    if (!gl || !this.program || typeof gl.getProgramParameter !== 'function') return;
     const count = gl.getProgramParameter(this.program, gl.ACTIVE_UNIFORMS) || 0;
     for (let i = 0; i < count; i++) {
       const info = gl.getActiveUniform(this.program, i);
@@ -4102,7 +4112,10 @@ export class UniformBinder {
     if (value) {
       if (isWebGLTexture(value)) texture = value;
       else if (value.texture && isWebGLTexture(value.texture)) texture = value.texture;
-      else texture = this.textureCache.get(value, options);
+      else {
+        try { texture = this.textureCache.get(value, options); }
+        catch { texture = null; /* fonte inválida → fallback neutro */ }
+      }
     }
     if (!texture) texture = this.textureCache.getFallback(name);
 
@@ -4834,6 +4847,52 @@ function resolvePlanetSource(source, options = {}) {
 /** @private Objeto de preset (sprites) ou fallback compacto por nome. */
 const CLOUDLESS_PRESETS = new Set(['desert', 'mars', 'moon', 'mercury', 'io', 'europa']);
 
+/* Corpos com atmosfera volumetricamente relevante. Os demais (Luas, Mercúrio,
+ * Europa, Plutão…) recebem apenas o halo de superfície, a não ser que o
+ * renderizador passe explicitamente `atmosphere` em `createPlanetRenderSet`. */
+const ATMOSPHERE_PRESET_KEYS = new Set([
+  'earth', 'terra', 'ocean', 'venus', 'titan', 'jupiter', 'saturn', 'uranus',
+  'neptune', 'gasgiant',
+]);
+
+/* Preset de nuvens mais fiel a cada corpo quando o preset de sprites não traz
+ * camadas próprias (ex.: gigantes gasosos usam `clouds: null`). */
+const CLOUD_PRESET_BY_BODY = Object.freeze({
+  venus: 'venus',
+  titan: 'titan',
+  jupiter: 'gasGiant',
+  saturn: 'gasGiant',
+  uranus: 'gasGiant',
+  neptune: 'gasGiant',
+  gasgiant: 'gasGiant',
+});
+
+/* Cor aproximada do espalhamento quando o renderizador não passa um estado
+ * de `atmosphere.js`. Evita, por exemplo, Vênus com um limbo azul terrestre. */
+const ATMOSPHERE_TINTS = Object.freeze({
+  earth: '#5fa8ff',
+  terra: '#5fa8ff',
+  ocean: '#6fbcff',
+  venus: '#f7d79b',
+  titan: '#e8c07a',
+  jupiter: '#f0d7a8',
+  saturn: '#efe3c0',
+  uranus: '#7fc9cf',
+  neptune: '#2f5fc4',
+  gasgiant: '#f0d7a8',
+});
+
+/** @private Nome/preset → chave canônica de bioma (`terra` → `earth`). */
+function resolveBodyKey(value) {
+  if (!value) return '';
+  const raw = typeof value === 'string'
+    ? value
+    : (value.name ?? value.preset ?? value.bodyName ?? '');
+  if (typeof raw !== 'string') return '';
+  const lower = raw.trim().toLowerCase();
+  return (BIOME_PRESET_ALIASES[lower] ?? lower).toLowerCase();
+}
+
 function resolvePresetObject(presetInput) {
   if (presetInput && typeof presetInput === 'object') return presetInput;
   if (typeof presetInput === 'string') {
@@ -4999,9 +5058,12 @@ export function createCloudMaterial(source = 'earthlike', options = {}) {
   } else if (source && typeof source === 'object') {
     if (looksLikeTexture(source)) {
       const presetClouds = source.preset?.clouds;
-      cloudInput = presetClouds === null || presetClouds === false
-        ? 'none'
-        : (presetClouds ?? 'earthlike');
+      const gasGiant = source.preset?.type === 'gasGiant' || source.type === 'gasGiant';
+      if (presetClouds === null || presetClouds === false) {
+        cloudInput = gasGiant ? 'gasGiant' : (source.cloudMap ? 'earthlike' : 'none');
+      } else {
+        cloudInput = presetClouds ?? (gasGiant ? 'gasGiant' : 'earthlike');
+      }
     } else if (source.clouds !== undefined) {
       cloudInput = source.clouds === null ? 'none' : source.clouds;
     } else {
@@ -5187,10 +5249,28 @@ export function createPlanetRenderSet(source = {}, options = {}) {
   const presetObject = surface.meta.preset ?? BIOME_PRESETS.earth;
   const planetRadius = opts.planetRadius ?? opts.body?.radius ?? 6.371e6;
 
+  const presetKey = resolveBodyKey(presetObject)
+    || resolveBodyKey(typeof source === 'string' ? source : source?.preset);
+
   let clouds = null;
   const cloudSetting = presetObject?.clouds;
-  if (opts.clouds !== false && cloudSetting !== null && cloudSetting !== false) {
-    const cloudSource = looksLikeTexture(source) ? source : (presetObject?.clouds ?? opts.clouds ?? 'earthlike');
+  const wantsClouds = opts.clouds === false
+    ? false
+    : opts.clouds != null
+      ? true
+      : cloudSetting === false
+        ? false
+        : cloudSetting != null
+          ? true
+          : presetObject?.type === 'gasGiant';
+  if (wantsClouds) {
+    let cloudSource;
+    if (looksLikeTexture(source)) cloudSource = source;
+    else if (opts.clouds && typeof opts.clouds === 'object') cloudSource = opts.clouds;
+    else if (typeof opts.clouds === 'string') cloudSource = opts.clouds;
+    else if (cloudSetting && typeof cloudSetting === 'object') cloudSource = cloudSetting;
+    else cloudSource = CLOUD_PRESET_BY_BODY[presetKey]
+      ?? (typeof cloudSetting === 'string' ? cloudSetting : 'earthlike');
     clouds = createCloudMaterial(cloudSource, {
       ...opts,
       planetRadius,
@@ -5200,13 +5280,30 @@ export function createPlanetRenderSet(source = {}, options = {}) {
   }
 
   let atmosphere = null;
+  const explicitAtmosphere = opts.atmosphere !== undefined
+    && opts.atmosphere !== null
+    && opts.atmosphere !== false;
   if (opts.atmosphere !== false) {
-    const wantsAtmosphere = opts.atmosphere != null
-      || presetObject?.atmosphere != null
-      || presetObject?.clouds === true
+    const eligible = ATMOSPHERE_PRESET_KEYS.has(presetKey)
+      || presetObject?.type === 'gasGiant'
+      || (!presetKey && (presetObject?.clouds != null || presetObject?.atmosphere != null));
+    const hasAtmosphereData = presetObject?.atmosphere != null
+      || presetObject?.clouds != null
       || presetObject?.type === 'gasGiant';
-    if (wantsAtmosphere) {
-      atmosphere = createAtmosphereMaterial(opts.atmosphere ?? null, { ...opts, planetRadius });
+    if (explicitAtmosphere || (eligible && hasAtmosphereData)) {
+      const atmosphereOptions = { ...opts, planetRadius };
+      if (!explicitAtmosphere && !atmosphereOptions.rayleigh) {
+        const tint = presetObject?.atmo?.color ?? ATMOSPHERE_TINTS[presetKey];
+        if (tint) {
+          const c = colorToLinear(tint, [0.3, 0.5, 1]);
+          const peak = Math.max(c[0], c[1], c[2], 1e-6);
+          atmosphereOptions.rayleigh = c.map((v) => (v / peak) * DEFAULT_RAYLEIGH_COEFF[2]);
+        }
+      }
+      atmosphere = createAtmosphereMaterial(
+        explicitAtmosphere ? opts.atmosphere : null,
+        atmosphereOptions,
+      );
     }
   }
 
@@ -5239,6 +5336,7 @@ export function createPlanetRenderSet(source = {}, options = {}) {
  * @returns {{textures:object, cache:TextureCache, dispose:() => void}}
  */
 export function uploadMaterialTextures(gl, material, options = {}) {
+  if (!material) throw new Error('shaders.js: uploadMaterialTextures requer um material.');
   const cache = options.cache ?? new TextureCache(gl, options);
   const disposedByUs = !options.cache;
   const uploaded = {};
@@ -5269,6 +5367,7 @@ export function uploadMaterialTextures(gl, material, options = {}) {
  * @returns {boolean}
  */
 export function updateShellCamera(material, cameraPosition, center, outerRadius) {
+  if (!material) return false;
   const cam = asVec3(cameraPosition);
   const c = asVec3(center);
   const inside = Math.hypot(cam[0] - c[0], cam[1] - c[1], cam[2] - c[2]) < outerRadius;
