@@ -1747,7 +1747,11 @@ export class RenderTarget {
   /** @private Cria textura, renderbuffers e FBOs. */
   _create() {
     const gl = this.gl;
-    const { GL_TEXTURE_2D } = gl;
+    // Em um contexto WebGL real a constante é `gl.TEXTURE_2D` — não existe
+    // `gl.GL_TEXTURE_2D`. Com o nome errado, `undefined` é passado como
+    // target e bindTexture/texParameteri/texImage2D falham com INVALID_ENUM,
+    // deixando o FBO incompleto e a tela preta.
+    const GL_TEXTURE_2D = gl.TEXTURE_2D;
     const filter = this.filter === 'nearest' ? gl.NEAREST : gl.LINEAR;
     const wrap = this.wrap === 'repeat' ? gl.REPEAT : gl.CLAMP_TO_EDGE;
 
@@ -1812,6 +1816,18 @@ export class RenderTarget {
       }
       this.samples = maxSamples;
       this.multisampleStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      if (this.multisampleStatus !== gl.FRAMEBUFFER_COMPLETE) {
+        // MSAA não suportado para este formato neste driver: desativa em vez
+        // de renderizar num FBO incompleto (todos os pixels seriam
+        // descartados e a tela ficaria preta).
+        gl.deleteFramebuffer(this.multisampleFramebuffer);
+        gl.deleteRenderbuffer(this.colorRenderbuffer);
+        if (this.msaaDepthRenderbuffer) gl.deleteRenderbuffer(this.msaaDepthRenderbuffer);
+        this.multisampleFramebuffer = null;
+        this.colorRenderbuffer = null;
+        this.msaaDepthRenderbuffer = null;
+        this.samples = 0;
+      }
     } else {
       this.samples = 0;
     }
@@ -2102,8 +2118,8 @@ vec4 ppPackDepth(float d) {
   return vec4(floor(v) / 255.0, fract(v), 0.0, 1.0);
 }
 
-float ppUnpackDepth(vec4 packed) {
-  return packed.r + packed.g / 255.0;
+float ppUnpackDepth(vec4 pk) {
+  return pk.r + pk.g / 255.0;
 }
 
 vec3 ppViewPosition(vec2 uv, float depth, vec2 nearFar, vec2 projection, vec2 orthoSize, float ortho) {
@@ -3129,6 +3145,13 @@ export class FullscreenPass extends PostPass {
         this.lastError = diagnostic;
         this.error = diagnostic;
         this.enabled = false;
+        if (!this._errorLogged) {
+          this._errorLogged = true;
+          console.error(
+            `[Orbiter] shader do passe "${this.name}" falhou ao compilar (passe desativado):`,
+            diagnostic.log ?? diagnostic.message,
+          );
+        }
         if (this.onCompileError) this.onCompileError(diagnostic);
         this.pipeline?._handlePassError?.(this, diagnostic);
       },
@@ -4371,6 +4394,13 @@ export class PassChain {
         this.errors += 1;
         this.lastError = { pass: pass.name, error };
         pass.enabled = false;
+        // Loga uma vez por passe: um passe desativado silenciosamente
+        // (ex.: shader que não compila no driver) deixa a tela preta sem
+        // nenhum sinal no console.
+        if (!pass._errorLogged) {
+          pass._errorLogged = true;
+          console.error(`[Orbiter] passe de pós-processamento "${pass.name}" desativado por erro:`, error);
+        }
         if (this.onError) this.onError(pass, error);
         if (this.stopOnError) throw error;
       }
