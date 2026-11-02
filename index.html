@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orbiter — Simulador Orbital 2D</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #03050a; }
+    #game {
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      display: block;
+      cursor: crosshair;
+    }
+    #boot {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: #5fd4ff;
+      font: 600 14px ui-monospace, Menlo, Consolas, monospace;
+      letter-spacing: 0.08em;
+      background: radial-gradient(ellipse at center, #0a1626 0%, #03050a 70%);
+      z-index: 10;
+      text-align: center;
+      padding: 2em;
+    }
+    #boot.error { color: #ff5a5f; }
+    #help {
+      position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%);
+      color: rgba(227, 244, 255, 0.5);
+      font: 11px ui-monospace, Menlo, Consolas, monospace;
+      background: rgba(5, 13, 21, 0.55);
+      border: 1px solid rgba(95, 212, 255, 0.18);
+      border-radius: 6px;
+      padding: 6px 12px;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 5;
+    }
+    #help.visible { opacity: 1; }
+    #help b { color: rgba(95, 212, 255, 0.85); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="boot">INICIALIZANDO SIMULADOR ORBITAL…</div>
+
+  <div id="help">
+    <b>Shift/W</b> throttle ↑ &nbsp;<b>Ctrl/S</b> ↓ &nbsp;<b>X</b> corta &nbsp;<b>Espaço</b> 100% &nbsp;·&nbsp;
+    <b>A/D</b> ou <b>←/→</b> atitude &nbsp;<b>T</b> SAS prógrado &nbsp;·&nbsp;
+    <b>roda do rato</b> / <b>+ −</b> zoom &nbsp;·&nbsp; <b>, .</b> time warp &nbsp;<b>P</b> pausa &nbsp;<b>1–5</b> warp direto &nbsp;·&nbsp;
+    <b>arrasto c/ botão direito</b> pan &nbsp;<b>F</b> seguir &nbsp;<b>C</b> centralizar &nbsp;·&nbsp;
+    <b>R</b> reiniciar &nbsp;<b>H</b> HUD &nbsp;<b>Q</b> qualidade &nbsp;<b>F3</b> debug
+  </div>
+
+  <!--
+    Módulos ES6 exigem HTTP (não file://). Sirva a pasta, ex.:
+      python3 -m http.server 8000     →  http://localhost:8000/
+      npx serve .                     →  http://localhost:3000/
+    O jogo é todo costurado em main.js, que importa physics.js, atmosphere.js,
+    sprites.js, shaders.js e postprocessing.js.
+  -->
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
